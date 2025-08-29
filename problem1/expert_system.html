@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automotive Diagnostic Expert System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-8 m-4">
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Automotive Diagnostic Expert System</h1>
+            <p class="text-gray-500 mt-2">Let's figure out what's wrong with your car. Answer the questions to get a diagnosis.</p>
+        </div>
+
+        <!-- Main Content: Questions or Result -->
+        <div id="main-content">
+            <!-- Question Area -->
+            <div id="question-container" class="text-center fade-in">
+                <p id="question-text" class="text-xl text-gray-700 font-medium mb-6"></p>
+                <div id="options-container" class="flex justify-center gap-4">
+                    <!-- Options will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Result Area -->
+            <div id="result-container" class="hidden text-center bg-blue-50 p-6 rounded-lg border border-blue-200 fade-in">
+                <h2 class="text-2xl font-semibold text-blue-800 mb-2">Diagnosis Complete</h2>
+                <p id="result-text" class="text-lg text-blue-700"></p>
+            </div>
+        </div>
+
+        <!-- Footer / Controls -->
+        <div class="mt-8 text-center">
+            <button id="restart-button" class="bg-gray-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-gray-700 transition-colors duration-300">
+                Start Over
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. KNOWLEDGE BASE ---
+        // This is where the "expertise" is stored.
+        // It's a set of rules. Each rule has:
+        // - conditions: A set of facts that must be true for the rule to apply.
+        // - conclusion: The diagnosis to provide if the conditions are met.
+        const knowledgeBase = [
+            {
+                conditions: { 'engine_cranks': 'no', 'lights_work': 'no' },
+                conclusion: 'The battery is likely dead. Check the battery terminals for corrosion and try jump-starting the car.'
+            },
+            {
+                conditions: { 'engine_cranks': 'no', 'lights_work': 'yes' },
+                conclusion: 'The issue might be with the starter motor, solenoid, or ignition switch. You may hear a clicking sound.'
+            },
+            {
+                conditions: { 'engine_cranks': 'yes', 'engine_starts': 'no', 'smell_fuel': 'yes' },
+                conclusion: 'The engine might be flooded. Wait a few minutes before trying to start it again. If it persists, check spark plugs.'
+            },
+            {
+                conditions: { 'engine_cranks': 'yes', 'engine_starts': 'no', 'smell_fuel': 'no' },
+                conclusion: 'There is likely a fuel delivery problem. Check the fuel pump, fuel filter, or for an empty gas tank.'
+            },
+            {
+                conditions: { 'engine_starts': 'yes', 'runs_rough': 'yes' },
+                conclusion: 'The engine is running rough. This could be due to bad spark plugs, a clogged air filter, or an issue with the mass airflow sensor.'
+            },
+            {
+                conditions: { 'engine_starts': 'yes', 'overheating': 'yes' },
+                conclusion: 'The engine is overheating. DO NOT DRIVE. Check coolant levels (when cool), the radiator, and for any leaks. The thermostat may have failed.'
+            },
+            {
+                conditions: { 'brakes_squeal': 'yes' },
+                conclusion: 'Squealing brakes usually indicate that the brake pads are worn out and need to be replaced.'
+            }
+        ];
+
+        // --- All possible questions to gather facts ---
+        const questions = {
+            'engine_cranks': 'When you turn the key, does the engine crank (turn over)?',
+            'lights_work': 'Do the dashboard lights and headlights turn on?',
+            'engine_starts': 'Does the engine start at all?',
+            'smell_fuel': 'Do you smell gasoline after trying to start it?',
+            'runs_rough': 'If the engine starts, does it run rough or stall?',
+            'overheating': 'Does the temperature gauge show that the engine is overheating?',
+            'brakes_squeal': 'Do you hear a high-pitched squealing or grinding sound when you apply the brakes?'
+        };
+        
+        // --- The order in which to ask questions ---
+        // The order matters and creates a logical flow.
+        const questionOrder = [
+            'engine_cranks',
+            'lights_work',
+            'engine_starts',
+            'smell_fuel',
+            'runs_rough',
+            'overheating',
+            'brakes_squeal'
+        ];
+
+        // --- State Variables ---
+        let facts = {}; // Stores the user's answers (e.g., { engine_cranks: 'yes' })
+        let currentQuestionIndex = 0; // Tracks our position in the questionOrder array
+
+        // --- DOM Elements ---
+        const questionContainer = document.getElementById('question-container');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const resultContainer = document.getElementById('result-container');
+        const resultText = document.getElementById('result-text');
+        const restartButton = document.getElementById('restart-button');
+
+        // --- 2. INFERENCE ENGINE ---
+        // This is the "brain" of the system.
+        // It takes the current facts and checks them against the knowledge base.
+        function runInferenceEngine() {
+            for (const rule of knowledgeBase) {
+                // Check if a rule's conditions are met by the current facts
+                const ruleMet = Object.keys(rule.conditions).every(conditionKey => {
+                    return facts[conditionKey] === rule.conditions[conditionKey];
+                });
+
+                if (ruleMet) {
+                    showConclusion(rule.conclusion);
+                    return; // Stop after finding the first matching rule
+                }
+            }
+            
+            // If no conclusion was reached, ask the next question
+            askNextQuestion();
+        }
+
+        // --- 3. USER INTERFACE LOGIC ---
+        function askNextQuestion() {
+            if (currentQuestionIndex >= questionOrder.length) {
+                // We've run out of questions and found no solution
+                showConclusion("Sorry, I couldn't diagnose the problem with the information provided. The issue might be more complex. It's best to consult a professional mechanic.");
+                return;
+            }
+
+            const currentQuestionKey = questionOrder[currentQuestionIndex];
+            
+            // Skip question if we already have the fact from a previous dependency
+            if (facts.hasOwnProperty(currentQuestionKey)) {
+                currentQuestionIndex++;
+                askNextQuestion();
+                return;
+            }
+
+            questionText.textContent = questions[currentQuestionKey];
+            optionsContainer.innerHTML = ''; // Clear previous options
+
+            // Create 'Yes' button
+            const yesButton = document.createElement('button');
+            yesButton.textContent = 'Yes';
+            yesButton.className = 'bg-green-500 text-white font-semibold py-2 px-8 rounded-lg hover:bg-green-600 transition-colors duration-300';
+            yesButton.onclick = () => handleAnswer(currentQuestionKey, 'yes');
+            
+            // Create 'No' button
+            const noButton = document.createElement('button');
+            noButton.textContent = 'No';
+            noButton.className = 'bg-red-500 text-white font-semibold py-2 px-8 rounded-lg hover:bg-red-600 transition-colors duration-300';
+            noButton.onclick = () => handleAnswer(currentQuestionKey, 'no');
+
+            optionsContainer.appendChild(yesButton);
+            optionsContainer.appendChild(noButton);
+        }
+
+        function handleAnswer(key, value) {
+            facts[key] = value; // Add the new fact
+            currentQuestionIndex++; // Move to the next potential question
+            runInferenceEngine(); // Run the logic to see if we can conclude something
+        }
+
+        function showConclusion(conclusion) {
+            questionContainer.classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+            resultText.textContent = conclusion;
+        }
+
+        function startDiagnosis() {
+            facts = {};
+            currentQuestionIndex = 0;
+            resultContainer.classList.add('hidden');
+            questionContainer.classList.remove('hidden');
+            askNextQuestion();
+        }
+        
+        // --- Event Listeners ---
+        restartButton.addEventListener('click', startDiagnosis);
+
+        // --- Initial Start ---
+        document.addEventListener('DOMContentLoaded', startDiagnosis);
+    </script>
+</body>
+</html>
